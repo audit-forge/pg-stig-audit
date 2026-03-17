@@ -1,0 +1,35 @@
+# Credentials — never commit
+.env
+*.key
+*.pem
+*.crt
+service-account*.json
+credentials*.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Audit output files
+results.json
+audit-results.json
+*.sarif.json
+wiz-findings.json
+scc-findings.json
+remediation/
+
+# Test output
+test/output/
+
+# Snapshots (OPA exports) — optional to gitignore, may want to keep for history
+# snapshots/
+
+# macOS
+.DS_Store

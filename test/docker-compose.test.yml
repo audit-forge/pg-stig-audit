@@ -1,0 +1,99 @@
+# Test environment: spin up Postgres instances with various configs to validate checks.
+# Usage: docker compose -f test/docker-compose.test.yml up -d
+
+services:
+  # ── HARDENED instance (should pass most checks) ───────────────────────────
+  pg-hardened:
+    build:
+      context: .
+      dockerfile: Dockerfile.hardened
+    image: pg-stig-audit-hardened:local
+    container_name: pg-hardened
+    environment:
+      POSTGRES_PASSWORD: SecurePassw0rd!
+      POSTGRES_DB: postgres
+      POSTGRES_INITDB_ARGS: --auth-local=scram-sha-256 --auth-host=scram-sha-256
+    ports:
+      - "5433:5432"
+    command: >
+      postgres
+        -c ssl=on
+        -c ssl_cert_file=/etc/postgresql/certs/server.crt
+        -c ssl_key_file=/etc/postgresql/certs/server.key
+        -c ssl_min_protocol_version=TLSv1.2
+        -c ssl_ciphers=HIGH:!aNULL:!MD5:!RC4:!3DES
+        -c password_encryption=scram-sha-256
+        -c logging_collector=on
+        -c log_connections=on
+        -c log_disconnections=on
+        -c log_statement=ddl
+        -c log_min_duration_statement=1000
+        -c log_min_messages=warning
+        -c log_min_error_statement=error
+        -c log_line_prefix='%t [%p]: [%l-1] user=%u,db=%d,app=%a,client=%h '
+        -c log_error_verbosity=default
+        -c log_checkpoints=on
+        -c log_lock_waits=on
+        -c fsync=on
+        -c full_page_writes=on
+        -c idle_session_timeout=900000
+        -c listen_addresses=localhost
+    volumes:
+      - pg_hardened_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── VULNERABLE instance (should fail many checks — for testing detections) ─
+  pg-vulnerable:
+    image: postgres:16-alpine
+    container_name: pg-vulnerable
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: postgres
+      # Deliberately insecure settings
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "5434:5432"
+    command: >
+      postgres
+        -c ssl=off
+        -c password_encryption=md5
+        -c logging_collector=off
+        -c log_connections=off
+        -c log_disconnections=off
+        -c log_statement=none
+        -c log_min_messages=fatal
+        -c listen_addresses=*
+        -c fsync=on
+    volumes:
+      - pg_vulnerable_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── BASELINE instance (stock defaults — shows what default PG looks like) ──
+  pg-baseline:
+    image: postgres:16-alpine
+    container_name: pg-baseline
+    environment:
+      POSTGRES_PASSWORD: baseline_password
+      POSTGRES_DB: postgres
+    ports:
+      - "5435:5432"
+    volumes:
+      - pg_baseline_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_hardened_data:
+  pg_vulnerable_data:
+  pg_baseline_data:

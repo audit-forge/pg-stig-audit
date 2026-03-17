@@ -1,0 +1,21 @@
+pg-stig-audit — Executive Summary
+Generated: 2026-02-25T14:01:09.566709+00:00
+Label: hardened-fixture
+
+Total checks: 36
+Pass rate: 72.2%
+PASS: 26
+FAIL: 5
+WARN: 3
+
+Failed by severity:
+- CRITICAL: 2
+- HIGH: 3
+- MEDIUM: 0
+
+Top failing controls:
+- PG-CFG-006 [CRITICAL] SSL must be enabled
+- PG-CFG-008 [HIGH] SSL cipher list should not include weak ciphers
+- PG-CFG-009 [HIGH] pgaudit must be loaded in shared_preload_libraries
+- PG-LOG-010 [HIGH] pgaudit.log must cover DDL, WRITE, and ROLE events
+- PG-AUTH-001 [CRITICAL] No 'trust' authentication allowed in pg_hba.conf

@@ -1,0 +1,211 @@
+# pg-audit.yml
+# PostgreSQL CIS/STIG Security Audit — CI/CD Pipeline Gate
+#
+# Runs on every PR and push to main.
+# Fails the pipeline if CRITICAL or HIGH findings are detected.
+# Uploads SARIF results to GitHub Security tab (Code Scanning).
+#
+# Required secrets:
+#   (none required for basic Docker audit)
+#
+# Optional secrets for GCP SCC integration:
+#   GCP_SA_KEY       - Service account JSON key with SCC Findings Editor role
+#   GCP_PROJECT_ID   - Your GCP project ID
+#   SCC_SOURCE_NAME  - organizations/ORG/sources/SOURCE_ID
+#   WIZ_API_TOKEN    - Wiz API bearer token (if pushing to Wiz)
+
+name: PostgreSQL Security Audit (CIS/STIG)
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  schedule:
+    # Run nightly at 02:00 UTC against staging
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      fail_on:
+        description: "Fail pipeline on findings at this severity or above"
+        required: false
+        default: "high"
+        type: choice
+        options: [critical, high, any, none]
+      push_to_scc:
+        description: "Push findings to Google Cloud SCC"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  pg-security-audit:
+    name: PostgreSQL CIS/STIG Audit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write    # Required for uploading SARIF to GitHub Security
+      id-token: write           # Required for GCP Workload Identity (recommended over SA key)
+
+    services:
+      # Spin up a test PostgreSQL instance with realistic settings
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: ci_audit_password
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # ── Run the audit (direct TCP mode against the service container) ──────
+      - name: Run pg-stig-audit
+        id: audit
+        env:
+          PGPASSWORD: ci_audit_password
+          FAIL_ON: ${{ inputs.fail_on || 'high' }}
+        run: |
+          cd pg-stig-audit
+          python3 audit.py \
+            --mode direct \
+            --host localhost \
+            --port 5432 \
+            --user postgres \
+            --database testdb \
+            --sarif ../pg-audit-results.sarif.json \
+            --json ../pg-audit-results.json \
+            --wiz ../pg-audit-wiz.json \
+            --fail-on "${FAIL_ON}"
+        continue-on-error: true  # We handle exit code below after uploading artifacts
+
+      # ── Upload SARIF to GitHub Security Code Scanning ────────────────────
+      - name: Upload SARIF to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: pg-audit-results.sarif.json
+          category: pg-stig-audit
+
+      # ── Upload raw results as artifact ────────────────────────────────────
+      - name: Upload audit results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pg-audit-results-${{ github.run_number }}
+          path: |
+            pg-audit-results.sarif.json
+            pg-audit-results.json
+            pg-audit-wiz.json
+          retention-days: 90
+
+      # ── GCP Workload Identity (preferred over SA key for FedRAMP) ─────────
+      - name: Authenticate to Google Cloud
+        if: ${{ inputs.push_to_scc == 'true' || github.event_name == 'schedule' }}
+        uses: google-github-actions/auth@v2
+        with:
+          # Option A — Workload Identity Federation (recommended for FedRAMP):
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          # Option B — SA Key (simpler but less secure):
+          # credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # ── Push to Google Cloud Security Command Center ─────────────────────
+      - name: Push findings to GCP Security Command Center
+        if: ${{ inputs.push_to_scc == 'true' || github.event_name == 'schedule' }}
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          SCC_SOURCE_NAME: ${{ secrets.SCC_SOURCE_NAME }}
+        run: |
+          cd pg-stig-audit
+          python3 scripts/push_to_scc.py \
+            --findings ../pg-audit-results.json \
+            --project "$GCP_PROJECT_ID" \
+            --source "$SCC_SOURCE_NAME" \
+            --resource-name "//container.googleapis.com/projects/$GCP_PROJECT_ID/ci-postgres"
+
+      # ── Push to Wiz (if token available) ─────────────────────────────────
+      - name: Push findings to Wiz
+        if: ${{ secrets.WIZ_API_TOKEN != '' }}
+        env:
+          WIZ_API_TOKEN: ${{ secrets.WIZ_API_TOKEN }}
+        run: |
+          curl -sf -X POST https://api.wiz.io/graphql \
+            -H "Authorization: Bearer $WIZ_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d @pg-audit-wiz.json \
+            && echo "✅ Wiz findings uploaded" \
+            || echo "⚠️ Wiz upload failed (non-blocking)"
+
+      # ── Summary comment on PRs ────────────────────────────────────────────
+      - name: Post PR summary comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let results;
+            try {
+              results = JSON.parse(fs.readFileSync('pg-audit-results.json', 'utf8'));
+            } catch(e) {
+              console.log('Could not read results:', e);
+              return;
+            }
+
+            const all = results.results || [];
+            const failed = all.filter(r => r.status === 'FAIL');
+            const warned = all.filter(r => r.status === 'WARN');
+            const passed = all.filter(r => r.status === 'PASS');
+
+            const critical = failed.filter(r => r.severity === 'CRITICAL');
+            const high = failed.filter(r => r.severity === 'HIGH');
+
+            const icon = critical.length > 0 ? '🔴' : high.length > 0 ? '🟠' : '🟢';
+            const status = critical.length > 0 ? 'CRITICAL RISK' :
+                           high.length > 0 ? 'HIGH RISK' : 'PASSING';
+
+            let body = `## ${icon} PostgreSQL CIS/STIG Audit — ${status}\n\n`;
+            body += `| Result | Count |\n|---|---|\n`;
+            body += `| ✅ Passed | ${passed.length} |\n`;
+            body += `| ❌ Failed | ${failed.length} |\n`;
+            body += `| ⚠️ Warnings | ${warned.length} |\n`;
+
+            if (failed.length > 0) {
+              body += `\n### ❌ Failures\n`;
+              failed.slice(0, 10).forEach(r => {
+                body += `- **[${r.severity}]** \`${r.check_id}\` ${r.title}\n`;
+                if (r.cis_id) body += `  - CIS: ${r.cis_id}`;
+                if (r.stig_id) body += ` | STIG: ${r.stig_id}`;
+                if (r.fedramp_control) body += ` | FedRAMP: ${r.fedramp_control}`;
+                body += '\n';
+              });
+            }
+
+            body += `\n> Full results in [Security tab](${{ github.server_url }}/${{ github.repository }}/security/code-scanning) and workflow artifacts.`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
+
+      # ── Enforce exit code AFTER uploading artifacts ───────────────────────
+      - name: Enforce pipeline gate
+        if: steps.audit.outcome == 'failure'
+        run: |
+          echo "❌ pg-stig-audit found CRITICAL or HIGH findings. Pipeline blocked."
+          echo "   View details in the GitHub Security tab or workflow artifacts."
+          exit 1

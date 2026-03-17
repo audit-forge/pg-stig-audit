@@ -1,0 +1,1 @@
+Kubernetes mode test run log placeholder.

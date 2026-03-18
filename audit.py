@@ -41,7 +41,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 from runner import PgRunner
 from checks import ALL_CHECKERS
 from checks.base import Status, Severity
-from output import report, sarif, wiz_scc
+from output import report, sarif, wiz_scc, bundle
 
 
 def parse_args():
@@ -74,6 +74,7 @@ def parse_args():
     # Output options
     out = p.add_argument_group("Output")
     out.add_argument("--sarif", metavar="FILE", help="Write SARIF 2.1.0 output to FILE")
+    out.add_argument("--bundle", metavar="FILE", help="Write evidence bundle (zip) to FILE")
     out.add_argument("--wiz", metavar="FILE", help="Write Wiz findings JSON to FILE")
     out.add_argument("--scc", metavar="FILE", help="Write GCP SCC findings JSON to FILE")
     out.add_argument("--json", metavar="FILE", help="Write raw results JSON to FILE")
@@ -166,6 +167,9 @@ def main():
 
     if args.sarif:
         sarif.write(all_results, args.sarif, target_uri)
+
+    if args.bundle:
+        bundle.write(all_results, args.bundle, target_info, runner.snapshot())
 
     if args.wiz:
         wiz_scc.write_wiz(all_results, args.wiz, args.wiz_resource_id)

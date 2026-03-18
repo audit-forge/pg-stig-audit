@@ -1,7 +1,7 @@
 # pg-stig-audit — Pilot-to-Revenue Roadmap (Saved for Later)
 
 Status: parked (not active yet)
-Owner: Keith
+Owner: TBD
 Purpose: reusable plan when ready to commercialize
 
 ---

@@ -172,3 +172,12 @@ class PgRunner:
         """Verify we can reach the database."""
         rows = self.query("SELECT 1 AS ok;")
         return bool(rows) and "_error" not in rows[0]
+
+    def snapshot(self) -> dict:
+        """Return a runtime snapshot for evidence bundle."""
+        return {
+            "mode": self.mode,
+            "target": self.container or self.pod or f"{self.host}:{self.port}",
+            "user": self.user,
+            "database": self.database,
+        }

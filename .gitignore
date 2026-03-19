@@ -16,20 +16,44 @@ dist/
 build/
 .venv/
 venv/
+env/
 
 # Audit output files
 results.json
 audit-results.json
 *.sarif.json
+*.sarif
 wiz-findings.json
 scc-findings.json
 remediation/
+*.csv
+
+# Evidence bundles
+*.zip
 
 # Test output
 test/output/
 
-# Snapshots (OPA exports) — optional to gitignore, may want to keep for history
-# snapshots/
+# CVE data cache
+data/*.json
+data/*.gz
+
+# Internal / private documents — not for public release
+ROADMAP-PILOT-TO-REVENUE.md
+SECURITY-HARDENING-REPORT.md
+
+# Internal evidence packs and pre-submission reports
+evidence/
+reports/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
 # macOS
 .DS_Store
+
+# Snapshots (OPA exports) — optional, may want to keep for history
+# snapshots/

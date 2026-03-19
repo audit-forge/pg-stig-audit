@@ -87,12 +87,29 @@ python3 audit.py --mode docker --container postgres-test --json output/results.j
 python3 audit.py --mode docker --container postgres-test --sarif output/results.sarif
 ```
 
+### CSV output (with NIST 800-171, CMMC, and MITRE columns)
+
+```bash
+python3 audit.py --mode docker --container postgres-test --csv output/results.csv
+```
+
+The CSV includes these compliance columns for each control:
+- `NIST_800_53` — NIST SP 800-53 Rev 5 controls (e.g. `SC-8; SC-8(1)`)
+- `NIST_800_171` — NIST SP 800-171 Rev 2 control IDs (e.g. `3.13.8`)
+- `CMMC_Level` — CMMC 2.0 level (1 or 2)
+- `MITRE_ATTACK` — ATT&CK technique IDs (e.g. `T1040; T1078`)
+- `MITRE_D3FEND` — D3FEND technique IDs (e.g. `D3-ET; D3-ALCA`)
+- `DISA_STIG_ID` — DISA STIG finding ID where applicable (e.g. `V-214117`)
+
+Compatible with Excel, Google Sheets, and any standard spreadsheet tool.
+
 ### All outputs in one run
 
 ```bash
 python3 audit.py --mode docker --container postgres-test \
   --json output/results.json \
-  --sarif output/results.sarif
+  --sarif output/results.sarif \
+  --csv output/results.csv
 ```
 
 You can also use the Makefile shortcut:

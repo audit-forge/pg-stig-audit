@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "pg-stig-audit"
+version = "1.0.0"
+description = "PostgreSQL CIS Benchmark / DISA STIG audit tool for containerized databases"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+keywords = [
+    "postgresql",
+    "security",
+    "audit",
+    "cis-benchmark",
+    "disa-stig",
+    "nist",
+    "compliance",
+    "fedramp",
+    "cmmc",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+    "Topic :: System :: Systems Administration",
+]
+
+# No third-party runtime dependencies — uses Python standard library only
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+pg-stig-audit = "audit:main"
+
+[project.urls]
+Homepage = "https://github.com/audit-forge/pg-stig-audit"
+Repository = "https://github.com/audit-forge/pg-stig-audit"
+"Bug Tracker" = "https://github.com/audit-forge/pg-stig-audit/issues"
+
+[tool.setuptools.packages.find]
+include = ["checks*", "mappings*", "output*"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

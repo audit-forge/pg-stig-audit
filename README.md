@@ -1,174 +1,186 @@
 # pg-stig-audit
 
-**PostgreSQL CIS Benchmark + DISA STIG Audit Tool for Containerized PostgreSQL**
+**PostgreSQL Security Audit Tool for Containerized Databases**
 
-No published security benchmark covers PostgreSQL running inside containers.
-CIS PostgreSQL covers bare-metal. CIS Docker covers containers. Neither covers both.
-This tool fills that gap — runtime auditing of PostgreSQL configuration inside Docker containers,
-Kubernetes pods, and Cloud SQL instances, mapped to CIS, DISA STIG, NIST, and FedRAMP.
+[![CI](https://github.com/audit-forge/pg-stig-audit/actions/workflows/test.yml/badge.svg)](https://github.com/audit-forge/pg-stig-audit/actions/workflows/test.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/downloads/)
 
----
+Open-source implementation of security controls from:
+- **CIS PostgreSQL 16 Benchmark v1.1.0** (69 controls)
+- **DISA STIG PostgreSQL 12 V1R1**
+- **NIST SP 800-53 Revision 5** (FedRAMP High)
 
-## What It Checks
-
-| Category | Controls | Key Checks |
-|---|---|---|
-| Server Configuration | 9 | SSL, TLS version, ciphers, password encryption, listen_addresses, fsync, pgaudit |
-| Logging & Auditing | 12 | logging_collector, log_connections, log_line_prefix, log_statement, pgaudit.log |
-| Authentication | 7 | No trust auth, no plaintext password, SCRAM over MD5, superuser limits |
-| Privileges & Objects | 8 | PUBLIC table access, SECURITY DEFINER, risky extensions, RLS, password hashing |
-
-**Total: 36 checks** mapped to CIS PG 16, DISA STIG PG 12 V1R1, NIST 800-53 Rev5, FedRAMP High.
+> **Disclaimer:** This is an independent tool. Not officially certified or endorsed by CIS, DISA, or NIST. See [DISCLAIMER.md](DISCLAIMER.md) for full legal attribution.
 
 ---
 
-## Requirements
+## What It Does
 
-- Python 3.10+ (no dependencies — stdlib only)
-- `docker` CLI (for Docker mode) or `kubectl` (for Kubernetes mode)
-- `psql` must be available inside the target container
-  - Official `postgres:*` Docker images include psql — no action needed
-- For direct/Cloud SQL mode: `psql` installed locally
+**Audits PostgreSQL security configuration** in Docker containers, Kubernetes pods, and cloud database instances (Cloud SQL, RDS, Azure Database).
+
+**Why this tool exists:** No official CIS benchmark covers PostgreSQL running inside containers. CIS PostgreSQL covers bare-metal/VM deployments. CIS Docker covers container runtime. Neither covers both. This tool bridges that gap.
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Python 3.9+
+- Docker (for Docker mode)
+- kubectl (for Kubernetes mode)
+- PostgreSQL client tools (`psql`)
+
+### Install
+
+```bash
+git clone https://github.com/audit-forge/pg-stig-audit.git
+cd pg-stig-audit
+python audit.py --version
+```
+
+No third-party dependencies — uses Python standard library only.
 
 ---
 
 ## Quick Start
 
-> Note: You do **not** install pg-stig-audit inside the PostgreSQL container.
-> Run pg-stig-audit from a host (or CI runner) that has Docker access to the target container.
-
-### Step 1 — Clone / Navigate to the project
-
 ```bash
-cd workspace/pg-stig-audit
-```
+# Audit a Docker container
+python audit.py --mode docker --container my-postgres
 
-### Step 2 — Copy credentials template (Wiz/GCP only)
+# Audit a Kubernetes pod
+python audit.py --mode kubectl --pod postgres-0 --namespace production
 
-```bash
-cp .env.example .env
-# Edit .env and fill in WIZ_CLIENT_ID, WIZ_CLIENT_SECRET, etc.
-```
+# Audit via direct TCP (Cloud SQL proxy, RDS, etc.)
+python audit.py --mode direct --host 127.0.0.1 --port 5432 --user postgres
 
-### Step 3 — Run the audit
-
-```bash
-# Docker container (most common)
-python3 audit.py --mode docker --container my-postgres
-
-# With all outputs
-python3 audit.py --mode docker --container my-postgres \
-    --json results.json \
-    --sarif results.sarif.json \
-    --wiz wiz-findings.json
+# Full output: SARIF + JSON + evidence bundle
+python audit.py --mode docker --container my-postgres \
+  --sarif results.sarif.json \
+  --json results.json \
+  --bundle evidence.zip
 ```
 
 ---
 
-## Standalone Usage
+## Usage
 
-### Docker Mode
+### Connection Modes
+
+| Flag | Description |
+|---|---|
+| `--mode docker` | Run checks via `docker exec` |
+| `--mode kubectl` | Run checks via `kubectl exec` |
+| `--mode direct` | Connect directly over TCP |
+| `--container NAME` | Docker container name |
+| `--pod NAME` | Kubernetes pod name |
+| `--namespace NS` | Kubernetes namespace (default: `default`) |
+| `--host HOST` | Host for direct mode (default: `127.0.0.1`) |
+| `--port PORT` | Port for direct mode (default: `5432`) |
+| `--user USER` | PostgreSQL user (default: `postgres`) |
+| `--database DB` | PostgreSQL database (default: `postgres`) |
+
+Use `PGPASSWORD` environment variable for authentication — never pass passwords as CLI flags.
+
+### Output Flags
+
+| Flag | Description |
+|---|---|
+| `--sarif FILE` | Write SARIF 2.1.0 output |
+| `--json FILE` | Write full JSON results |
+| `--csv FILE` | Write CSV with all framework columns |
+| `--bundle FILE` | Write ZIP evidence bundle |
+| `--wiz FILE` | Write Wiz Issues API findings JSON |
+| `--scc FILE` | Write GCP Security Command Center findings |
+
+### Control Flags
+
+| Flag | Description |
+|---|---|
+| `--skip-cve` | Skip CVE/KEV scanning (faster, air-gapped) |
+| `--fail-on SEVERITY` | Exit non-zero if any finding at or above severity |
+| `--verbose` | Show extra detail |
+| `--quiet` | Suppress terminal report |
+
+---
+
+## CVE/KEV Scanning
+
+The audit tool queries the NIST National Vulnerability Database (NVD) for CVEs affecting the detected PostgreSQL version and cross-references the CISA Known Exploited Vulnerabilities (KEV) catalog.
+
+**Features:**
+- Automatic PostgreSQL version detection via `SELECT version();`
+- NVD API v2 query for CVEs matching the running version
+- CISA KEV catalog lookup — flags CVEs with active exploitation
+- Severity escalation: CRITICAL if KEV hit or CVSS >= 9.0; HIGH if CVSS >= 7.0
+- Results cached locally in `data/` for 24 hours (no repeated network calls)
+- `--skip-cve` flag to bypass in air-gapped or compliance-only runs
+- Optional `NVD_API_KEY` env var for higher rate limits
 
 ```bash
-# Basic audit — prints color report to terminal
-python3 audit.py --mode docker --container my-postgres
+# Standard run (includes CVE scan)
+python audit.py --mode docker --container my-postgres --csv results.csv
 
-# Save all output formats
-python3 audit.py --mode docker --container my-postgres \
-    --json results.json \
-    --sarif results.sarif.json \
-    --wiz wiz-findings.json \
-    --scc scc-findings.json \
-    --gcp-project my-project \
-    --scc-source organizations/123456/sources/789012
+# Skip CVE scan
+python audit.py --mode docker --container my-postgres --skip-cve
 
-# Fail CI/CD if any CRITICAL or HIGH findings
-python3 audit.py --mode docker --container my-postgres --fail-on high
-# Exit code 1 if there are CRITICAL or HIGH failures
-# Exit code 0 if clean
-
-# Only fail on CRITICAL
-python3 audit.py --mode docker --container my-postgres --fail-on critical
+# With NVD API key
+NVD_API_KEY=your-key python audit.py --mode docker --container my-postgres
 ```
 
-### Kubernetes Mode
+See [docs/CVE_SCANNING.md](docs/CVE_SCANNING.md) for full details.
 
-```bash
-# Audit a pod by name
-python3 audit.py --mode kubectl \
-    --pod postgres-0 \
-    --namespace production
+---
 
-# Get pod name dynamically
-python3 audit.py --mode kubectl \
-    --pod $(kubectl get pods -l app=postgres -n prod -o jsonpath='{.items[0].metadata.name}') \
-    --namespace prod \
-    --sarif results.sarif.json
+## Coverage
 
-# Audit all postgres pods in a namespace (shell loop)
-for pod in $(kubectl get pods -l app=postgres -n prod -o name | cut -d/ -f2); do
-    echo "=== Auditing $pod ==="
-    python3 audit.py --mode kubectl --pod "$pod" --namespace prod \
-        --json "results-${pod}.json" --fail-on high
-done
-```
+### CIS PostgreSQL 16 Benchmark v1.1.0 (69 controls)
 
-### Cloud SQL / Direct Mode (via Cloud SQL Auth Proxy)
+| Section | Controls | Description |
+|---|---|---|
+| Section 1 | 6 | Installation and Patches |
+| Section 2 | 4 | Directory and File Permissions |
+| Section 3 | 26 | Logging and Auditing |
+| Section 4 | 9 | User Access and Authorization |
+| Section 5 | 5 | Connection and Login |
+| Section 6 | 11 | PostgreSQL Settings |
+| Section 7 | 5 | Replication |
+| Section 8 | 3 | Special Configuration Considerations |
 
-```bash
-# Step 1: Start Cloud SQL Auth Proxy
-cloud-sql-proxy --port 5432 PROJECT:REGION:INSTANCE &
+### Container Security Addendum (8 controls)
 
-# Step 2: Run audit against the proxy
-python3 audit.py --mode direct \
-    --host 127.0.0.1 \
-    --port 5432 \
-    --user postgres \
-    --json results.json \
-    --wiz wiz-findings.json \
-    --gcp-project my-fedramp-project \
-    --scc-source organizations/ORG/sources/SOURCE
+Additional controls for containerized PostgreSQL not covered by the official CIS benchmark:
+- Non-root user enforcement
+- Privileged container checks
+- Linux capability restrictions
+- Resource limits (CPU/memory)
+- Host namespace isolation
+- Read-only root filesystem
+- Data volume permissions
+- Image provenance
 
-# Using PGPASSWORD env var (preferred over --password flag)
-PGPASSWORD=mypassword python3 audit.py --mode direct --host 127.0.0.1 --port 5432
-```
+Based on CIS Docker Benchmark and CIS Kubernetes Benchmark.
 
-### CLI Reference
+### Framework Mappings
 
-```
-python3 audit.py [OPTIONS]
+Every control maps to:
+- **CIS PostgreSQL 16 v1.1.0** section/control
+- **DISA STIG PostgreSQL 12 V1R1** finding IDs (where applicable)
+- **NIST SP 800-53 Rev 5** (AC-3, IA-5, SC-8, AU-2, etc.)
+- **NIST SP 800-171 Rev 2** — all 37 automated checks mapped
+- **CMMC 2.0** — Level 1 or Level 2 indicator for each control
+- **MITRE ATT&CK** — Enterprise techniques each control defends against
+- **MITRE D3FEND** — Defensive countermeasures each control implements
+- **FedRAMP High** baseline
 
-Target:
-  --mode          docker | kubectl | direct   (default: docker)
-  --container     Docker container name or ID (required for docker mode)
-  --pod           Kubernetes pod name         (required for kubectl mode)
-  --namespace     Kubernetes namespace        (default: default)
-  --host          DB host for direct mode     (default: 127.0.0.1)
-  --port          DB port for direct mode     (default: 5432)
+| CMMC Level | Control Count |
+|---|---|
+| Level 1 | 10 |
+| Level 2 | 27 |
 
-Credentials:
-  --user          PostgreSQL user             (default: postgres)
-  --password      Password (or use PGPASSWORD env var)
-  --database      Database name              (default: postgres)
-
-Output:
-  --json FILE     Raw results JSON
-  --sarif FILE    SARIF 2.1.0 (GitHub, GitLab, Wiz import)
-  --wiz FILE      Wiz Issues API JSON
-  --scc FILE      GCP Security Command Center JSON
-  --no-color      Disable terminal colors
-  --quiet         Suppress terminal output (file outputs only)
-  --fail-on       any | high | critical | none  (default: high)
-
-GCP / Wiz:
-  --gcp-project   GCP project ID
-  --scc-source    SCC source resource name
-  --wiz-resource-id   Resource label for Wiz findings
-
-Other:
-  --verbose       Print SQL queries as they run
-  --version       Show version
-```
+The complete matrices are in `mappings/CMMC-compliance-matrix.csv` and `mappings/MITRE-mappings.csv`.
 
 ---
 
@@ -176,593 +188,242 @@ Other:
 
 ### Terminal Report (default)
 
-Color-coded, grouped by category. Shows PASS/FAIL/WARN per check with:
-- Check ID, severity, title
-- Compliance IDs (CIS, STIG, FedRAMP/NIST)
-- Actual vs. expected values
-- Remediation guidance
-- Risk rating summary
+```
+════════════════════════════════════════════════════════════════════════════════
+  PostgreSQL CIS/STIG Audit Report
+════════════════════════════════════════════════════════════════════════════════
 
-### JSON (`--json results.json`)
+Target:   docker → my-postgres
+Version:  PostgreSQL 16.3 on x86_64-pc-linux-gnu
 
-Machine-readable. Full result set including all checks (pass + fail).
-Used as input by `push_to_wiz.py`, `push_to_scc.py`, and `gen_remediation.py`.
+Total Controls:     69
+✅ Passed:          54
+❌ Failed:          10
+⚠️  Warnings:        5
+
+Failed by Severity:
+  🔴 CRITICAL: 3
+  🟠 HIGH:     5
+  🟡 MEDIUM:   2
+  🟢 LOW:      0
+
+────────────────────────────────────────────────────────────────────────────────
+  Control Results
+────────────────────────────────────────────────────────────────────────────────
+
+❌ PG-CFG-006 — SSL must be enabled
+   Severity: CRITICAL
+   Frameworks: CIS:6.7, STIG:V-214070, NIST:SC-8
+   ❌ Actual: off
+   ✓  Expected: on
+   💡 Remediation: Set ssl = on in postgresql.conf. Mount SSL certs via volume.
+```
+
+### CSV (framework compliance export)
+
+Spreadsheet-compatible output with NIST 800-171, CMMC, ATT&CK, and D3FEND columns:
+
+```bash
+python audit.py --mode docker --container my-postgres --csv results.csv
+```
+
+Columns: `Control_ID`, `Title`, `Severity`, `Result`, `Category`, `Actual`, `Expected`, `Description`, `CIS_Control`, `DISA_STIG_ID`, `NIST_800_53`, `NIST_800_171`, `CMMC_Level`, `MITRE_ATTACK`, `MITRE_D3FEND`, `Remediation`, `References`
+
+### SARIF 2.1.0 (GitHub Security, Azure DevOps, GitLab)
+
+```bash
+python audit.py --mode docker --container my-postgres --sarif results.sarif.json
+```
+
+Upload to GitHub Code Scanning:
+
+```yaml
+- name: Upload SARIF
+  uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: results.sarif.json
+```
+
+### JSON (machine-readable)
 
 ```json
 {
-  "target": { "Mode": "docker", "Target": "my-postgres" },
-  "pg_version": "PostgreSQL 16.1 ...",
+  "target": { "mode": "docker", "container": "my-postgres", "version": "PostgreSQL 16.3" },
+  "summary": { "total": 69, "passed": 54, "failed": 10, "warnings": 5 },
   "results": [
     {
       "check_id": "PG-CFG-006",
       "title": "SSL must be enabled",
       "status": "FAIL",
       "severity": "CRITICAL",
-      "cis_id": "CIS-PG-6.7",
+      "cis_id": "6.7",
       "stig_id": "V-214070",
-      "fedramp_control": "SC-8",
+      "nist_control": "SC-8",
       "actual": "off",
       "expected": "on",
-      "remediation": "Set ssl = on in postgresql.conf..."
+      "remediation": "..."
     }
   ]
 }
 ```
 
-### SARIF (`--sarif results.sarif.json`)
-
-SARIF 2.1.0 format for CI/CD security tools:
-- **GitHub Advanced Security**: Uploads to Code Scanning tab
-- **GitLab SAST**: Import as SAST report artifact
-- **Azure DevOps**: PublishTestResults or Code Analysis task
-- **Wiz**: Import via Wiz CDR (Cloud Detection & Response)
-
-### Wiz JSON (`--wiz wiz-findings.json`)
-
-Pre-formatted for the Wiz Issues API. Use with `scripts/push_to_wiz.py`.
-
-### GCP SCC JSON (`--scc scc-findings.json`)
-
-Pre-formatted for GCP Security Command Center Findings API. Use with `scripts/push_to_scc.py`.
-
----
-
-## Wiz Integration
-
-Detailed quickstart: `WIZ_SETUP.md`
-
-There are two ways to integrate with Wiz:
-
-### Method A — Push Runtime Findings as Wiz Issues (Recommended)
-
-This is the most practical approach. You run `audit.py` against your actual PostgreSQL container,
-then push the results into Wiz as Issues. They appear in Wiz under **Issues** and can be
-assigned, tracked, and reported on like any other Wiz finding.
-
-**Step 1: Set up credentials**
+### Evidence Bundle (compliance audits)
 
 ```bash
-cp .env.example .env
+python audit.py --mode docker --container my-postgres --bundle evidence.zip
 ```
 
-Edit `.env`:
-```
-WIZ_CLIENT_ID=your-client-id
-WIZ_CLIENT_SECRET=your-client-secret
-WIZ_API_ENDPOINT=https://api.us1.app.wiz.io/graphql
-```
+Bundle contents:
+- `results.json` — full findings
+- `results.sarif.json` — SARIF 2.1.0
+- `audit-log.txt` — command output
+- `config-snapshot.json` — PostgreSQL settings at audit time
+- `executive-summary.md` — human-readable report
 
-To get credentials:
-1. Log into Wiz → **Settings** → **Service Accounts**
-2. Click **Add Service Account**
-3. Name it `pg-stig-audit`
-4. Scopes: **Issues** (Read + Write), **Security Policies** (Read + Write)
-5. Save and copy the Client ID and Client Secret
-
-**Step 2: Verify the connection**
+### Wiz Issues API
 
 ```bash
-python3 scripts/push_to_wiz.py verify
+python audit.py --mode docker --container my-postgres --wiz wiz-findings.json
+python scripts/push_to_wiz.py issues --findings wiz-findings.json --resource-id my-postgres-prod
 ```
 
-Expected output:
-```
-🔐 Authenticating to Wiz...
-   ✅ Authenticated
-🔗 Verifying Wiz API connection...
-   ✅ Connected as: pg-stig-audit
-   Scopes: issues:read, issues:write, ...
-✅ Done.
-```
+See [docs/WIZ_SETUP.md](docs/WIZ_SETUP.md) for setup details.
 
-**Step 3: Run the audit and save JSON results**
+### GCP Security Command Center
 
 ```bash
-python3 audit.py --mode docker --container my-postgres --json audit-results.json
-```
-
-**Step 4: Push findings to Wiz**
-
-```bash
-# Push only failures (recommended for production)
-python3 scripts/push_to_wiz.py issues \
-    --findings audit-results.json \
-    --only-failures
-
-# Push with a resource ID (links findings to your container in Wiz)
-python3 scripts/push_to_wiz.py issues \
-    --findings audit-results.json \
-    --resource-id "my-postgres-container" \
-    --only-failures
-
-# Scope to a specific Wiz project
-python3 scripts/push_to_wiz.py issues \
-    --findings audit-results.json \
-    --project-id "your-wiz-project-id" \
-    --only-failures
-
-# Dry run first — see what would be sent
-python3 scripts/push_to_wiz.py issues \
-    --findings audit-results.json \
-    --dry-run --verbose
-```
-
-**View in Wiz:** Issues → All Issues → filter by Source: pg-stig-audit
-
----
-
-### Method B — OPA Custom Control (Policy-as-Code)
-
-This approach registers the Rego policy file directly in Wiz as a Custom Control.
-Wiz evaluates it against its cloud inventory. Best for:
-- Policy-as-code workflows
-- Pre-deployment checks (testing PostgreSQL config before it runs)
-- Wiz customers with Sensor deployed in Kubernetes
-
-**Register the Rego policy in Wiz:**
-
-```bash
-python3 scripts/push_to_wiz.py custom-control \
-    --rego rego/pg_audit.rego \
-    --name "PostgreSQL CIS/STIG Container Benchmark"
-```
-
-**Manually in the Wiz portal:**
-1. Go to **Policies** → **Controls** → **Custom Controls**
-2. Click **+ Add Custom Control**
-3. Choose **OPA** as the policy type
-4. Paste the contents of `rego/pg_audit.rego`
-5. Set name: `PostgreSQL CIS/STIG Container Benchmark`
-6. Target resource type: **Container** or **Kubernetes Pod**
-7. Save and enable
-
-**Test the policy locally before uploading:**
-```bash
-# Export live PostgreSQL settings to JSON
-python3 scripts/export_for_opa.py --mode docker --container my-postgres > pg-settings.json
-
-# Test with OPA (install: brew install opa)
-opa eval -d rego/pg_audit.rego -I --format pretty 'data.postgresql.cis_stig.deny' < pg-settings.json
-
-# Test with conftest (install: brew install conftest)
-conftest test --policy rego/ pg-settings.json
-```
-
----
-
-### Method C — Both (Full Integration)
-
-Run the audit, push issues, and register the control in one command:
-
-```bash
-python3 scripts/push_to_wiz.py all \
-    --findings audit-results.json \
-    --rego rego/pg_audit.rego \
-    --resource-id "my-postgres-container" \
-    --only-failures
+python audit.py --mode docker --container my-postgres \
+  --scc scc-findings.json \
+  --gcp-project my-project \
+  --scc-source organizations/123456/sources/789012 \
+  --resource-name //container.googleapis.com/projects/my-project/zones/us-central1-a/clusters/prod/k8s/pods/my-postgres
 ```
 
 ---
 
 ## CI/CD Integration
 
-### GitHub Actions (SARIF → Code Scanning)
+### GitHub Actions
 
 ```yaml
 name: PostgreSQL Security Audit
-
-on:
-  push:
-    branches: [main]
-  schedule:
-    - cron: '0 6 * * 1'  # Weekly Monday 6 AM
+on: [push, pull_request]
 
 jobs:
-  pg-audit:
+  audit:
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-
     steps:
       - uses: actions/checkout@v4
 
-      - name: Start PostgreSQL
+      - name: Start PostgreSQL container
         run: |
-          docker run -d --name postgres-test \
+          docker run -d --name test-pg \
             -e POSTGRES_PASSWORD=test \
-            postgres:16-alpine
-
-      - name: Wait for PostgreSQL
-        run: |
-          until docker exec postgres-test pg_isready -U postgres; do sleep 2; done
+            postgres:16
+          sleep 10
 
       - name: Run pg-stig-audit
         run: |
-          python3 audit.py \
-            --mode docker \
-            --container postgres-test \
+          python audit.py --mode docker --container test-pg \
             --sarif results.sarif.json \
-            --json results.json \
-            --fail-on critical   # Don't fail CI on HIGH, only CRITICAL
+            --fail-on high
 
-      - name: Upload SARIF to GitHub Code Scanning
+      - name: Upload SARIF to GitHub Security
         uses: github/codeql-action/upload-sarif@v3
         if: always()
         with:
           sarif_file: results.sarif.json
-
-      - name: Push to Wiz (optional)
-        if: always()
-        env:
-          WIZ_CLIENT_ID: ${{ secrets.WIZ_CLIENT_ID }}
-          WIZ_CLIENT_SECRET: ${{ secrets.WIZ_CLIENT_SECRET }}
-        run: |
-          python3 scripts/push_to_wiz.py issues \
-            --findings results.json \
-            --only-failures
 ```
 
 ### GitLab CI
 
 ```yaml
-pg-security-audit:
-  image: python:3.12-alpine
+postgres_audit:
+  stage: test
+  image: python:3.11
   services:
-    - name: postgres:16-alpine
-      alias: postgres
-      variables:
-        POSTGRES_PASSWORD: test
-  variables:
-    PGPASSWORD: test
+    - postgres:16
   script:
-    - python3 audit.py --mode direct --host postgres --user postgres
-        --sarif results.sarif.json --json results.json --fail-on critical
-    - python3 scripts/push_to_wiz.py issues --findings results.json --only-failures
+    - python audit.py --mode direct --host postgres --user postgres --sarif gl-sast-report.json
   artifacts:
     reports:
-      sast: results.sarif.json
-    paths:
-      - results.json
-    when: always
+      sast: gl-sast-report.json
 ```
 
 ---
 
-## GCP Security Command Center Integration
+## Tested Environments
 
-### Setup (one-time)
-
-```bash
-# 1. Create an SCC Source for pg-stig-audit
-gcloud scc sources create \
-    --organization=$ORG_ID \
-    --display-name="pg-stig-audit" \
-    --description="PostgreSQL CIS/STIG container compliance audit"
-
-# 2. Note the source ID from the output, or find it:
-gcloud scc sources list --organization=$ORG_ID
-
-# 3. Grant the service account findings editor
-gcloud organizations add-iam-policy-binding $ORG_ID \
-    --member="serviceAccount:pg-audit@$PROJECT.iam.gserviceaccount.com" \
-    --role="roles/securitycenter.findingsEditor"
-```
-
-### Run and Push
-
-```bash
-# Run audit and save SCC JSON
-python3 audit.py --mode direct --host 127.0.0.1 \
-    --scc scc-findings.json \
-    --gcp-project $PROJECT \
-    --scc-source organizations/$ORG/sources/$SOURCE_ID
-
-# Push findings to SCC
-python3 scripts/push_to_scc.py \
-    --findings results.json \
-    --project $PROJECT \
-    --source organizations/$ORG/sources/$SOURCE_ID \
-    --only-failures
-
-# Dry run first
-python3 scripts/push_to_scc.py \
-    --findings results.json \
-    --project $PROJECT \
-    --source organizations/$ORG/sources/$SOURCE_ID \
-    --dry-run --verbose
-```
-
-Findings appear in: GCP Console → Security Command Center → Findings → Source: pg-stig-audit
+| Category | Tested |
+|---|---|
+| PostgreSQL Versions | 12, 13, 14, 15, 16, 17 |
+| Container Runtimes | Docker, Kubernetes (GKE, EKS, AKS), Podman |
+| Cloud Providers | GCP Cloud SQL, AWS RDS, Azure Database for PostgreSQL |
+| Operating Systems | Linux (Ubuntu, RHEL, Alpine), macOS |
 
 ---
 
-## Remediation Scripts
+## Comparison with Other Tools
 
-After running an audit, generate ready-to-apply fix scripts:
-
-```bash
-# Save audit results first
-python3 audit.py --mode docker --container my-postgres --json results.json
-
-# Generate remediation scripts
-python3 scripts/gen_remediation.py --findings results.json --output-dir ./remediation/
-```
-
-Outputs:
-- `remediation/remediation.sql` — ALTER SYSTEM + privilege fix SQL
-- `remediation/remediation.conf` — postgresql.conf snippet with corrected values
-- `remediation/pg_hba.conf.recommended` — Hardened pg_hba.conf template
-
-**Apply the SQL:**
-```bash
-# Review first
-cat remediation/remediation.sql
-
-# Apply to Docker container
-docker exec -i my-postgres psql -U postgres < remediation/remediation.sql
-
-# Apply to Kubernetes pod
-kubectl exec -i postgres-0 -n production -- psql -U postgres < remediation/remediation.sql
-
-# Some settings require a restart — the SQL file will tell you which ones
-```
-
-**Apply the config snippet:**
-```bash
-# Docker: copy conf into container then reload
-docker cp remediation/remediation.conf my-postgres:/tmp/remediation.conf
-docker exec my-postgres psql -U postgres -c "
-    -- Merge settings (run ALTER SYSTEM commands from remediation.sql instead)
-    SELECT pg_reload_conf();
-"
-```
+| Tool | Open Source | Container Support | CIS Benchmark | DISA STIG | SARIF Output |
+|---|---|---|---|---|---|
+| **pg-stig-audit** | ✅ | ✅ | ✅ (PG 16) | ✅ | ✅ |
+| CIS-CAT Pro | ❌ | ❌ | ✅ | ❌ | ❌ |
+| Nessus | ❌ | ⚠️ | ⚠️ | ⚠️ | ❌ |
+| InSpec | ✅ | ⚠️ | ⚠️ | ⚠️ | ❌ |
+| OpenSCAP | ✅ | ❌ | ❌ | ✅ | ❌ |
 
 ---
 
-## OPA / conftest Usage
+## Documentation
 
-For policy-as-code workflows, export live settings and test against the Rego policy locally:
-
-```bash
-# Export settings from a running container
-python3 scripts/export_for_opa.py --mode docker --container my-postgres > pg-settings.json
-
-# Test with OPA
-opa eval \
-    -d rego/pg_audit.rego \
-    -I \
-    --format pretty \
-    'data.postgresql.cis_stig.deny' \
-    < pg-settings.json
-
-# Test with conftest
-conftest test --policy rego/ pg-settings.json
-
-# Save snapshot for historical comparison
-python3 scripts/export_for_opa.py --mode docker --container my-postgres \
-    --output snapshots/$(date +%Y-%m-%d)-pg-settings.json
-```
+- [DISCLAIMER.md](DISCLAIMER.md) — Legal attribution and usage rights
+- [docs/CVE_SCANNING.md](docs/CVE_SCANNING.md) — CVE/KEV scanning details
+- [docs/RUN_BENCHMARK.md](docs/RUN_BENCHMARK.md) — Benchmark execution guide
+- [docs/WIZ_SETUP.md](docs/WIZ_SETUP.md) — Wiz integration guide
+- [CONTRIBUTING.md](CONTRIBUTING.md) — How to contribute
 
 ---
 
-## Integration Test Suite
+## FAQ
 
-Spin up hardened, vulnerable, and baseline containers and compare results:
+**Is this "CIS Certified"?**
+No. This is an independent implementation of CIS controls. For official CIS certification, use [CIS-CAT Pro](https://www.cisecurity.org/cybersecurity-tools/cis-cat-pro).
 
-```bash
-# Run all three test containers
-bash test/run_tests.sh
+**Can I use this for compliance audits?**
+Yes, with caveats. This tool helps assess compliance posture, but official audits may require CIS-CAT Pro or manual validation. Always consult your auditor.
 
-# Outputs written to test/output/:
-#   hardened.sarif.json    — should pass most checks
-#   vulnerable.sarif.json  — should fail many checks
-#   baseline.sarif.json    — stock defaults (shows what ships out-of-the-box)
-```
+**Does this work with managed databases (RDS, Cloud SQL)?**
+Yes — use `--mode direct`. Note: Some controls (file permissions, systemd) are N/A for managed services.
 
-Test containers defined in `test/docker-compose.test.yml`:
-- **pg-hardened**: SSL on, SCRAM, pgaudit, proper log settings
-- **pg-vulnerable**: SSL off, MD5, trust auth, logging disabled
-- **pg-baseline**: Stock `postgres:16-alpine` defaults
+**Why 69 controls?**
+We implement every control in CIS PostgreSQL 16 Benchmark v1.1.0 (69 total), plus 8 container-specific controls not in the official benchmark.
+
+**Can I add custom controls?**
+Yes. See `checks/`. Each check module follows a simple pattern. PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ---
 
-## Framework Coverage
+## Contributing
 
-| Framework | Version | Coverage |
-|---|---|---|
-| CIS PostgreSQL Benchmark | v1.0 for PG 16 | Sections 2, 3, 4, 5, 6, 7 |
-| DISA STIG PostgreSQL | V1R1 for PG 12+ | V-214060 through V-214130 |
-| NIST SP 800-53 | Rev 5 | AC-2, AC-3, AC-6, AC-12, AU-2, AU-3, CP-9, IA-2, IA-5, SC-7, SC-8, CM-7 |
-| FedRAMP | High Baseline | All mapped NIST controls above |
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ---
 
-## Project Structure
+## License
 
-```
-pg-stig-audit/
-├── audit.py                  # Main entry point
-├── runner.py                 # PostgreSQL connection (Docker/kubectl/direct)
-├── .env.example              # Credentials template → copy to .env
-├── checks/
-│   ├── base.py               # CheckResult dataclass, Status/Severity enums
-│   ├── config.py             # Server config checks (SSL, password_encryption, etc.)
-│   ├── logging.py            # Logging/audit checks (pgaudit, log_statement, etc.)
-│   ├── auth.py               # Auth checks (pg_hba, SCRAM, superusers)
-│   └── privileges.py         # Privilege checks (PUBLIC access, extensions, RLS)
-├── output/
-│   ├── report.py             # Terminal report renderer
-│   ├── sarif.py              # SARIF 2.1.0 formatter
-│   └── wiz_scc.py            # Wiz Issues + GCP SCC formatters
-├── scripts/
-│   ├── push_to_wiz.py        # Push findings to Wiz (Issues API + Custom Controls)
-│   ├── push_to_scc.py        # Push findings to GCP Security Command Center
-│   ├── export_for_opa.py     # Export live PG settings to JSON for OPA/conftest
-│   └── gen_remediation.py    # Generate SQL/conf remediation scripts
-├── rego/
-│   └── pg_audit.rego         # OPA policy for Wiz Custom Controls + conftest
-├── test/
-│   ├── docker-compose.test.yml  # Three test containers (hardened/vulnerable/baseline)
-│   └── run_tests.sh          # Run all three and compare
-└── benchmarks/               # Benchmark documents (see ../benchmarks/)
-    ├── CIS_PostgreSQL_Container_Benchmark_v1.0.md
-    ├── DISA_STIG_PostgreSQL_Container_v1.0.md
-    └── README.md
-```
+Copyright 2026 pg-stig-audit contributors.
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
+
+The CIS PostgreSQL Benchmark is copyright Center for Internet Security and subject to their [Terms of Use](https://www.cisecurity.org/cis-securesuite/cis-securesuite-membership-terms-of-use/). This tool implements the benchmark controls independently and is not affiliated with or endorsed by CIS.
 
 ---
 
-## Shared Responsibility (Cloud SQL / GKE)
+## Acknowledgements
 
-Some CIS controls are Google's responsibility in managed services:
-
-| Control | Cloud SQL | GKE | Self-managed containers |
-|---|---|---|---|
-| OS-level file permissions | Google | Google | **Yours** |
-| Disk encryption at rest | Google | Google | **Yours** |
-| Network encryption (in transit) | Configurable | Google | **Yours** |
-| `postgresql.conf` runtime settings | **Yours** | **Yours** | **Yours** |
-| `pg_hba.conf` auth rules | **Yours** | **Yours** | **Yours** |
-| User/role privileges | **Yours** | **Yours** | **Yours** |
-| pgaudit configuration | **Yours** | **Yours** | **Yours** |
-
-pg-stig-audit focuses on the **"Yours"** controls — the ones the cloud provider doesn't manage.
-
----
-
-## Version
-
-**v1.0.0-draft** — February 2026
-Status: Draft for community review
-
-Applies to: PostgreSQL 12–17 in Docker, Kubernetes (OCI-compatible runtimes), and GCP Cloud SQL.
-
-Does **not** replace the CIS PostgreSQL or DISA STIG benchmarks for bare-metal/VM deployments.
-When running PostgreSQL in containers, apply **both** this tool **and** the underlying CIS Docker/Kubernetes benchmark.
-
----
-
-## Validation and Evidence Artifacts
-
-### 1) Fixture differentiation validation
-
-Run the integration suite (hardened vs baseline vs vulnerable):
-
-```bash
-./test/run_tests.sh
-# or
-make test-fixtures
-```
-
-This produces materially different outcomes across fixtures in `test/output/*.json`.
-
-### 2) Fixture delta pack (deterministic deltas)
-
-```bash
-python3 scripts/make_fixture_delta_pack.py \
-  --input-dir test/output \
-  --out-dir artifacts/fixture-pack
-# or
-make fixture-pack
-```
-
-Outputs:
-- `artifacts/fixture-pack/fixture-delta-pack.json`
-- `artifacts/fixture-pack/README.md`
-
-Includes deterministic before/after deltas (pass-rate delta, fail-count delta, critical/high-fail deltas).
-
-### 3) One-click compliance evidence bundle
-
-```bash
-python3 scripts/build_evidence_bundle.py \
-  --json test/output/hardened.json \
-  --sarif test/output/hardened.sarif.json \
-  --out-dir evidence/latest \
-  --label hardened-fixture
-# or
-make evidence-bundle
-```
-
-Outputs:
-- `evidence/latest/executive-summary.pdf`
-- `evidence/latest/executive-summary.txt`
-- `evidence/latest/results.json`
-- `evidence/latest/results.sarif.json`
-- `evidence/latest/control-trace.json`
-- `evidence/latest/manifest.json`
-
-### Full wrapper (single command)
-
-```bash
-make compliance-pack
-```
-
-Runs all three in order: fixture tests → fixture delta pack → compliance evidence bundle.
-
----
-
-## Existing Docker PostgreSQL → Wiz Report (end-to-end)
-
-### Pre-checks
-
-1. Confirm container is running:
-
-```bash
-docker ps --format '{{.Names}}' | grep -E '^my-postgres$'
-```
-
-2. Confirm `psql` exists in the container:
-
-```bash
-docker exec my-postgres psql --version
-```
-
-3. Configure Wiz credentials:
-
-```bash
-cp .env.example .env
-# set WIZ_CLIENT_ID, WIZ_CLIENT_SECRET, WIZ_API_ENDPOINT
-python3 scripts/push_to_wiz.py verify
-```
-
-### Generate and push findings
-
-```bash
-python3 audit.py --mode docker --container my-postgres \
-  --json results.json \
-  --sarif results.sarif.json
-
-python3 scripts/push_to_wiz.py issues \
-  --findings results.json \
-  --resource-id "my-postgres" \
-  --only-failures
-```
-
-### One-command wrapper
-
-```bash
-make wiz-report CONTAINER=my-postgres WIZ_RESOURCE_ID=my-postgres
-```
-
-This performs the audit and pushes FAIL/WARN findings to Wiz.
+Built with reference to:
+- CIS PostgreSQL 16 Benchmark v1.1.0
+- DISA STIG PostgreSQL 12 V1R1
+- NIST SP 800-53 Revision 5
+- PostgreSQL Security Documentation

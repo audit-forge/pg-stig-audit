@@ -30,12 +30,24 @@ class CheckResult:
     cis_id: Optional[str] = None
     stig_id: Optional[str] = None
     fedramp_control: Optional[str] = None
+    nist_800_53_controls: list = field(default_factory=list)
+    # CMMC 2.0 / NIST 800-171 Rev 2 mappings
+    nist_800_171: list = field(default_factory=list)
+    cmmc_level: Optional[int] = None
+    # MITRE framework mappings
+    mitre_attack: list = field(default_factory=list)
+    mitre_d3fend: list = field(default_factory=list)
     description: str = ""
     actual: str = ""
     expected: str = ""
     remediation: str = ""
     references: list = field(default_factory=list)
     category: str = ""
+    # CVE/KEV vulnerability fields
+    cve_ids: list = field(default_factory=list)
+    kev_score: str = ""
+    cve_remediation: str = ""
+    local_path: str = ""
 
     def to_dict(self):
         return {
@@ -46,12 +58,21 @@ class CheckResult:
             "cis_id": self.cis_id,
             "stig_id": self.stig_id,
             "fedramp_control": self.fedramp_control,
+            "nist_800_53_controls": self.nist_800_53_controls,
+            "nist_800_171": self.nist_800_171,
+            "cmmc_level": self.cmmc_level,
+            "mitre_attack": self.mitre_attack,
+            "mitre_d3fend": self.mitre_d3fend,
             "description": self.description,
             "actual": self.actual,
             "expected": self.expected,
             "remediation": self.remediation,
             "references": self.references,
             "category": self.category,
+            "cve_ids": self.cve_ids,
+            "kev_score": self.kev_score,
+            "cve_remediation": self.cve_remediation,
+            "local_path": self.local_path,
         }
 
 

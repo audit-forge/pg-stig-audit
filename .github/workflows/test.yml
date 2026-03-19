@@ -1,0 +1,45 @@
+name: Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Verify syntax
+        run: |
+          python -m py_compile audit.py runner.py
+          python -m py_compile checks/__init__.py checks/base.py
+          python -m py_compile checks/config.py checks/auth.py
+          python -m py_compile checks/logging.py checks/privileges.py
+          python -m py_compile checks/cve_scanner.py
+          python -m py_compile mappings/__init__.py mappings/frameworks.py
+          python -m py_compile output/__init__.py output/report.py
+          python -m py_compile output/sarif.py output/bundle.py
+
+      - name: Run tests
+        run: |
+          python -m pytest test/test_checks.py -v
+
+      - name: Verify imports
+        run: |
+          python -c "from checks import ALL_CHECKERS; print(f'Loaded {len(ALL_CHECKERS)} checkers')"
+          python -c "from mappings.frameworks import enrich_all; print('Framework mappings OK')"
+          python -c "from output import report, sarif, bundle; print('Output modules OK')"

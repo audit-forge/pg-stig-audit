@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run tests before release
+        run: |
+          python -m pytest test/test_checks.py -v
+
+      - name: Build distribution archive
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          ARCHIVE="pg-stig-audit-${VERSION}.tar.gz"
+          tar --exclude='.git' \
+              --exclude='*.pyc' \
+              --exclude='__pycache__' \
+              --exclude='.pytest_cache' \
+              --exclude='data/*.json' \
+              --exclude='evidence' \
+              --exclude='reports' \
+              -czf "${ARCHIVE}" \
+              -C "$(dirname "$PWD")" \
+              "$(basename "$PWD")"
+          echo "ARCHIVE=${ARCHIVE}" >> "$GITHUB_ENV"
+
+      - name: Extract changelog entry
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "pg-stig-audit ${{ github.ref_name }}"
+          body: |
+            ## pg-stig-audit ${{ github.ref_name }}
+
+            PostgreSQL CIS Benchmark / DISA STIG audit tool for containerized databases.
+
+            ### What's included
+            - CIS PostgreSQL 16 Benchmark v1.1.0 (69 controls)
+            - DISA STIG PostgreSQL 12 V1R1 mappings
+            - NIST SP 800-53 Rev 5, NIST SP 800-171, CMMC 2.0, MITRE ATT&CK/D3FEND
+            - CVE/KEV scanning via NVD API + CISA KEV catalog
+            - SARIF 2.1.0, JSON, CSV, and evidence bundle output
+
+            ### Quick start
+            ```bash
+            python audit.py --mode docker --container my-postgres
+            ```
+
+            See [README.md](README.md) for full usage guide.
+          files: ${{ env.ARCHIVE }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}

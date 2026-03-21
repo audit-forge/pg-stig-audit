@@ -28,6 +28,11 @@ SEVERITY_MAP = {
 STATUS_SKIP = {Status.PASS, Status.SKIP}
 
 
+def _sarif_artifact_uri(target_uri: str) -> str:
+    """Return a GitHub Code Scanning-safe artifact URI."""
+    return "scan-targets/postgresql-target"
+
+
 def generate(results: list[CheckResult], target_uri: str = "postgresql://localhost:5432") -> dict:
     """Generate a SARIF 2.1.0 document from audit results."""
 
@@ -67,6 +72,7 @@ def generate(results: list[CheckResult], target_uri: str = "postgresql://localho
 
     # Build results list (only failures and warnings)
     sarif_results = []
+    artifact_uri = _sarif_artifact_uri(target_uri)
     for r in results:
         if r.status in STATUS_SKIP:
             continue
@@ -93,8 +99,7 @@ def generate(results: list[CheckResult], target_uri: str = "postgresql://localho
                 {
                     "physicalLocation": {
                         "artifactLocation": {
-                            "uri": target_uri,
-                            "uriBaseId": "%SRCROOT%",
+                            "uri": artifact_uri,
                         },
                         "region": {"startLine": 1},
                     }

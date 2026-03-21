@@ -1,34 +1,19 @@
-name: PostgreSQL Security Audit (CIS/STIG)
+name: PostgreSQL Security Audit
 
 on:
   push:
     branches: [main, master, develop]
   pull_request:
     branches: [main, master]
-  schedule:
-    - cron: "0 2 * * *"
   workflow_dispatch:
-    inputs:
-      fail_on:
-        description: "Fail pipeline on findings at this severity or above"
-        required: false
-        default: "high"
-        type: choice
-        options: [critical, high, any, none]
-      push_to_scc:
-        description: "Push findings to Google Cloud SCC"
-        required: false
-        default: false
-        type: boolean
 
 jobs:
   pg-security-audit:
-    name: PostgreSQL CIS/STIG Audit
+    name: Run PostgreSQL security audit
     runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
-      id-token: write
 
     services:
       postgres:
@@ -57,7 +42,6 @@ jobs:
         id: audit
         env:
           PGPASSWORD: ci_audit_password
-          FAIL_ON: ${{ github.event.inputs.fail_on || 'high' }}
         run: |
           python3 audit.py \
             --mode direct \
@@ -68,17 +52,17 @@ jobs:
             --sarif pg-audit-results.sarif.json \
             --json pg-audit-results.json \
             --wiz pg-audit-wiz.json \
-            --fail-on "${FAIL_ON}"
+            --fail-on high
         continue-on-error: true
 
-      - name: Upload SARIF to GitHub Security
+      - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: pg-audit-results.sarif.json
           category: pg-stig-audit
 
-      - name: Upload audit results
+      - name: Upload audit artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -87,92 +71,10 @@ jobs:
             pg-audit-results.sarif.json
             pg-audit-results.json
             pg-audit-wiz.json
-          retention-days: 90
-
-      - name: Authenticate to Google Cloud
-        if: ${{ github.event.inputs.push_to_scc == 'true' || github.event_name == 'schedule' }}
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Push findings to GCP Security Command Center
-        if: ${{ github.event.inputs.push_to_scc == 'true' || github.event_name == 'schedule' }}
-        env:
-          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
-          SCC_SOURCE_NAME: ${{ secrets.SCC_SOURCE_NAME }}
-        run: |
-          python3 scripts/push_to_scc.py \
-            --findings pg-audit-results.json \
-            --project "$GCP_PROJECT_ID" \
-            --source "$SCC_SOURCE_NAME" \
-            --resource-name "//container.googleapis.com/projects/$GCP_PROJECT_ID/ci-postgres"
-
-      - name: Push findings to Wiz
-        if: ${{ secrets.WIZ_API_TOKEN != '' }}
-        env:
-          WIZ_API_TOKEN: ${{ secrets.WIZ_API_TOKEN }}
-        run: |
-          curl -sf -X POST https://api.wiz.io/graphql \
-            -H "Authorization: Bearer $WIZ_API_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d @pg-audit-wiz.json \
-            && echo "✅ Wiz findings uploaded" \
-            || echo "⚠️ Wiz upload failed (non-blocking)"
-
-      - name: Post PR summary comment
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            let results;
-            try {
-              results = JSON.parse(fs.readFileSync('pg-audit-results.json', 'utf8'));
-            } catch (e) {
-              console.log('Could not read results:', e);
-              return;
-            }
-
-            const all = results.results || [];
-            const failed = all.filter(r => r.status === 'FAIL');
-            const warned = all.filter(r => r.status === 'WARN');
-            const passed = all.filter(r => r.status === 'PASS');
-            const critical = failed.filter(r => r.severity === 'CRITICAL');
-            const high = failed.filter(r => r.severity === 'HIGH');
-
-            const icon = critical.length > 0 ? '🔴' : high.length > 0 ? '🟠' : '🟢';
-            const status = critical.length > 0 ? 'CRITICAL RISK' : high.length > 0 ? 'HIGH RISK' : 'PASSING';
-
-            let body = `## ${icon} PostgreSQL CIS/STIG Audit — ${status}\n\n`;
-            body += `| Result | Count |\n|---|---|\n`;
-            body += `| ✅ Passed | ${passed.length} |\n`;
-            body += `| ❌ Failed | ${failed.length} |\n`;
-            body += `| ⚠️ Warnings | ${warned.length} |\n`;
-
-            if (failed.length > 0) {
-              body += `\n### ❌ Failures\n`;
-              failed.slice(0, 10).forEach(r => {
-                body += `- **[${r.severity}]** \`${r.check_id}\` ${r.title}\n`;
-                if (r.cis_id) body += `  - CIS: ${r.cis_id}`;
-                if (r.stig_id) body += ` | STIG: ${r.stig_id}`;
-                if (r.fedramp_control) body += ` | FedRAMP: ${r.fedramp_control}`;
-                body += '\n';
-              });
-            }
-
-            body += `\n> Full results in the Security tab and workflow artifacts.`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body,
-            });
+          retention-days: 30
 
       - name: Enforce pipeline gate
         if: steps.audit.outcome == 'failure'
         run: |
-          echo "❌ pg-stig-audit found CRITICAL or HIGH findings. Pipeline blocked."
-          echo "   View details in the GitHub Security tab or workflow artifacts."
+          echo "pg-stig-audit found HIGH or CRITICAL findings."
           exit 1

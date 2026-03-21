@@ -103,13 +103,27 @@ def parse_args():
     return p.parse_args()
 
 
-def write_csv(filepath: str, results: list) -> None:
+def _csv_local_path(result) -> str:
+    if result.local_path:
+        return result.local_path
+    if result.evidence_type == "container-config":
+        return "container-inspect"
+    if result.evidence_type == "runtime-config":
+        return "runtime-config"
+    if result.evidence_type == "filesystem":
+        return "filesystem"
+    if result.evidence_type == "network":
+        return "runtime-network-config"
+    return "not_applicable"
+
+
+def write_csv(filepath: str, results: list, cve_scanned: bool) -> None:
     """Write audit results to a CSV file suitable for spreadsheet analysis.
 
-    Columns follow the schema documented in docs/RUN_BENCHMARK.md:
-      Control_ID, Title, Severity, Result, Category, Description,
-      CIS_Control, DISA_STIG_ID, NIST_800_53, NIST_800_171, CMMC_Level,
-      MITRE_ATTACK, MITRE_D3FEND, Actual, Expected, Remediation, References
+    CVE/KEV fields are conditional:
+      - vulnerability findings populate them directly
+      - non-vulnerability findings emit not_applicable
+      - if CVE scanning was skipped, vulnerability fields emit not_scanned
     """
     fieldnames = [
         "Control_ID",
@@ -138,6 +152,16 @@ def write_csv(filepath: str, results: list) -> None:
         writer = csv.DictWriter(f, fieldnames=fieldnames, quoting=csv.QUOTE_ALL)
         writer.writeheader()
         for r in results:
+            is_vuln_row = r.category == "vulnerability-management" or r.check_id.endswith("VER-001")
+            if is_vuln_row:
+                cve_id = "; ".join(r.cve_ids) if r.cve_ids else ("none_found" if cve_scanned else "not_scanned")
+                kev_score = r.kev_score or ("none_known_exploited" if cve_scanned else "not_scanned")
+                cve_remediation = r.cve_remediation or ("none_required" if cve_scanned else "not_scanned")
+            else:
+                cve_id = "not_applicable"
+                kev_score = "not_applicable"
+                cve_remediation = "not_applicable"
+
             writer.writerow({
                 "Control_ID": r.check_id,
                 "Title": r.title,
@@ -156,10 +180,10 @@ def write_csv(filepath: str, results: list) -> None:
                 "MITRE_D3FEND": "; ".join(r.mitre_d3fend),
                 "Remediation": r.remediation,
                 "References": "; ".join(r.references),
-                "CVE_ID": "; ".join(r.cve_ids) if r.cve_ids else "",
-                "KEV_Score": r.kev_score or "",
-                "CVE_Remediation": r.cve_remediation or "",
-                "Local_Path": r.local_path or "",
+                "CVE_ID": cve_id,
+                "KEV_Score": kev_score,
+                "CVE_Remediation": cve_remediation,
+                "Local_Path": _csv_local_path(r),
             })
 
 
@@ -283,7 +307,7 @@ def main():
         print(f"[json] Written to {args.json}")
 
     if args.csv:
-        write_csv(args.csv, all_results)
+        write_csv(args.csv, all_results, cve_scanned=not args.skip_cve)
         print(f"[csv]  Written to {args.csv}")
 
     # Exit code based on fail-on level

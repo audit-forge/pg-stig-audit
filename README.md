@@ -63,6 +63,22 @@ python audit.py --mode docker --container my-postgres \
   --bundle evidence.zip
 ```
 
+## Reproducible Local Validation
+
+The repo includes a fixture workflow for repeatable external testing and local validation:
+- `pg-hardened`
+- `pg-baseline`
+- `pg-vulnerable`
+
+Quick start:
+
+```bash
+make test-fixtures
+```
+
+The primary fixture workflow uses plain `docker run`, so it does not depend on Docker Compose support.
+See [test/README.md](test/README.md) for fixture details and [docs/RUN_BENCHMARK.md](docs/RUN_BENCHMARK.md) for the operator runbook.
+
 ---
 
 ## Usage
@@ -227,7 +243,16 @@ Spreadsheet-compatible output with NIST 800-171, CMMC, ATT&CK, and D3FEND column
 python audit.py --mode docker --container my-postgres --csv results.csv
 ```
 
-Columns: `Control_ID`, `Title`, `Severity`, `Result`, `Category`, `Actual`, `Expected`, `Description`, `CIS_Control`, `DISA_STIG_ID`, `NIST_800_53`, `NIST_800_171`, `CMMC_Level`, `MITRE_ATTACK`, `MITRE_D3FEND`, `Remediation`, `References`
+Columns: `Control_ID`, `Title`, `Severity`, `Result`, `Category`, `Actual`, `Expected`, `Description`, `CIS_Control`, `DISA_STIG_ID`, `NIST_800_53`, `NIST_800_171`, `CMMC_Level`, `MITRE_ATTACK`, `MITRE_D3FEND`, `Remediation`, `References`, `CVE_ID`, `KEV_Score`, `CVE_Remediation`, `Local_Path`
+
+Conditional CSV field behavior:
+- `CVE_ID`, `KEV_Score`, `CVE_Remediation`
+  - `not_scanned` when `--skip-cve` is used
+  - `not_applicable` for non-vulnerability findings
+  - populated values on the version/CVE finding when CVE scanning runs
+- `Local_Path`
+  - real binary/path when available
+  - otherwise a scope hint such as `runtime-config`, `runtime-network-config`, `filesystem`, or `container-inspect`
 
 ### SARIF 2.1.0 (GitHub Security, Azure DevOps, GitLab)
 
@@ -428,4 +453,6 @@ Built with reference to:
 - CIS PostgreSQL 16 Benchmark v1.1.0
 - DISA STIG PostgreSQL 12 V1R1
 - NIST SP 800-53 Revision 5
+- PostgreSQL Security Documentation
+T SP 800-53 Revision 5
 - PostgreSQL Security Documentation

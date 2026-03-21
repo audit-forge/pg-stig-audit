@@ -206,6 +206,23 @@ Good for:
 - pre-release checks
 - container hardening evidence collection
 
+## Reproducible fixture path
+
+If you want a known local test target before aiming at a real environment, use the included fixtures:
+
+```bash
+make test-fixtures
+```
+
+The primary fixture workflow uses plain `docker run`, so it works even on hosts that do not have Docker Compose support enabled.
+
+That spins up:
+- `pg-hardened`
+- `pg-baseline`
+- `pg-vulnerable`
+
+See [test/README.md](../test/README.md) for the fixture workflow.
+
 ---
 
 ## Kubernetes mode
@@ -311,6 +328,15 @@ python3 -m unittest discover -s test -p 'test_*.py' -v
 
 ### No JSON/SARIF files appear
 - Confirm the output directory exists if you are writing into a nested path
+- Use `mkdir -p output` before running
+
+---
+
+## Related docs
+
+- `README.md`
+- `docs/WIZ_SETUP.md`
+ory exists if you are writing into a nested path
 - Use `mkdir -p output` before running
 
 ---

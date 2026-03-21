@@ -1,4 +1,6 @@
-# Wiz Setup Guide for pg-stig-audit
+# Optional Wiz Integration Guide for pg-stig-audit
+
+This guide is for teams that already have Wiz and want to connect `pg-stig-audit` to it. Wiz is an optional integration path, not a required part of the core audit workflow.
 
 This guide shows how to wire `pg-stig-audit` into Wiz using both supported paths:
 

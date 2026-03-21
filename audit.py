@@ -104,15 +104,16 @@ def parse_args():
 
 
 def _csv_local_path(result) -> str:
-    if result.local_path:
+    if getattr(result, "local_path", ""):
         return result.local_path
-    if result.evidence_type == "container-config":
+    evidence_type = getattr(result, "evidence_type", "")
+    if evidence_type == "container-config":
         return "container-inspect"
-    if result.evidence_type == "runtime-config":
+    if evidence_type == "runtime-config":
         return "runtime-config"
-    if result.evidence_type == "filesystem":
+    if evidence_type == "filesystem":
         return "filesystem"
-    if result.evidence_type == "network":
+    if evidence_type in ("network", "network-exposure"):
         return "runtime-network-config"
     return "not_applicable"
 

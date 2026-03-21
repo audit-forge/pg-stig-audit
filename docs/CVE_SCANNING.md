@@ -190,8 +190,13 @@ standard compliance columns:
 | `CVE_Remediation` | `Upgrade PostgreSQL to a patched version. Currently running: 16.1. See NVD for affected version ranges. \| CISA KEV required action for CVE-2024-0985: Apply updates per vendor instructions.` |
 | `Local_Path` | `/usr/lib/postgresql/16/bin/postgres` |
 
-For standard compliance checks (non-CVE rows), these four columns are empty
-strings.
+For standard compliance checks (non-CVE rows), these columns now use explicit semantics instead of empty strings:
+- `CVE_ID` → `not_applicable`
+- `KEV_Score` → `not_applicable`
+- `CVE_Remediation` → `not_applicable`
+- `Local_Path` → a scope hint such as `runtime-config`, `runtime-network-config`, `filesystem`, or `container-inspect`
+
+If `--skip-cve` is used, the vulnerability/version row emits `not_scanned` for the CVE-specific columns.
 
 ---
 

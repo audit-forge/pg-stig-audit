@@ -92,8 +92,8 @@ Use `PGPASSWORD` environment variable for authentication — never pass password
 | `--json FILE` | Write full JSON results |
 | `--csv FILE` | Write CSV with all framework columns |
 | `--bundle FILE` | Write ZIP evidence bundle |
-| `--wiz FILE` | Write Wiz Issues API findings JSON |
-| `--scc FILE` | Write GCP Security Command Center findings |
+| `--wiz FILE` | Write optional Wiz Issues API findings JSON |
+| `--scc FILE` | Write optional GCP Security Command Center findings |
 
 ### Control Flags
 
@@ -280,14 +280,16 @@ Bundle contents:
 - `config-snapshot.json` — PostgreSQL settings at audit time
 - `executive-summary.md` — human-readable report
 
-### Wiz Issues API
+### Optional Wiz Integration
+
+Wiz is supported as an **optional integration path** for teams that already operate in Wiz. It is not required to use `pg-stig-audit`, and the core audit workflow stands on its own with terminal, JSON, CSV, SARIF, and evidence-bundle outputs.
 
 ```bash
 python audit.py --mode docker --container my-postgres --wiz wiz-findings.json
 python scripts/push_to_wiz.py issues --findings wiz-findings.json --resource-id my-postgres-prod
 ```
 
-See [docs/WIZ_SETUP.md](docs/WIZ_SETUP.md) for setup details.
+See [docs/WIZ_SETUP.md](docs/WIZ_SETUP.md) for optional setup details.
 
 ### GCP Security Command Center
 

@@ -11,7 +11,7 @@ This guide shows how to wire `pg-stig-audit` into Wiz using both supported paths
 
 ## Prerequisites
 
-- Python 3.10+
+- Python 3.9+
 - Access to a PostgreSQL target (Docker, Kubernetes, or direct TCP)
 - Run this tool from the host/runner (no install inside the PostgreSQL container)
 - Wiz Service Account credentials with at least:

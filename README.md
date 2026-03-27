@@ -11,6 +11,8 @@ Open-source implementation of security controls from:
 - **DISA STIG PostgreSQL 12 V1R1**
 - **NIST SP 800-53 Revision 5** (FedRAMP High)
 
+This repository is currently positioned as a **validated v1.0 community-draft benchmark + runtime audit prototype**. The v1.0 release boundary is frozen in [`docs/V1_RELEASE_BOUNDARY.md`](docs/V1_RELEASE_BOUNDARY.md).
+
 > **Disclaimer:** This is an independent tool. Not officially certified or endorsed by CIS, DISA, or NIST. See [DISCLAIMER.md](DISCLAIMER.md) for full legal attribution.
 
 ---
@@ -46,29 +48,38 @@ No third-party dependencies — uses Python standard library only.
 
 ## Quick Start
 
+Fastest docs first:
+- [docs/QUICKSTART.md](docs/QUICKSTART.md) — copy/paste commands
+- [docs/BEGINNER_GUIDE.md](docs/BEGINNER_GUIDE.md) — plain-English walkthrough
+
 ```bash
 # Audit a Docker container
-python audit.py --mode docker --container my-postgres
+python3 audit.py --mode docker --container my-postgres
 
 # Audit a Kubernetes pod
-python audit.py --mode kubectl --pod postgres-0 --namespace production
+python3 audit.py --mode kubectl --pod postgres-0 --namespace production
 
 # Audit via direct TCP (Cloud SQL proxy, RDS, etc.)
-python audit.py --mode direct --host 127.0.0.1 --port 5432 --user postgres
+python3 audit.py --mode direct --host 127.0.0.1 --port 5432 --user postgres
 
 # Full output: SARIF + JSON + evidence bundle
-python audit.py --mode docker --container my-postgres \
+python3 audit.py --mode docker --container my-postgres \
   --sarif results.sarif.json \
   --json results.json \
   --bundle evidence.zip
 ```
 
-## Reproducible Local Validation
+## Repeatable Live Validation
 
-The repo includes a fixture workflow for repeatable external testing and local validation:
+The repo includes a Docker-based fixture workflow for repeatable local validation:
 - `pg-hardened`
 - `pg-baseline`
 - `pg-vulnerable`
+
+**Validated fixture outcomes for the current v1.0 baseline:**
+- `pg-hardened` → `PASS 30 / FAIL 3 / WARN 2`
+- `pg-baseline` → `PASS 19 / FAIL 12 / WARN 4`
+- `pg-vulnerable` → `PASS 17 / FAIL 14 / WARN 4`
 
 Quick start:
 
@@ -77,7 +88,7 @@ make test-fixtures
 ```
 
 The primary fixture workflow uses plain `docker run`, so it does not depend on Docker Compose support.
-See [test/README.md](test/README.md) for fixture details and [docs/RUN_BENCHMARK.md](docs/RUN_BENCHMARK.md) for the operator runbook.
+See [test/README.md](test/README.md) for fixture details, [test/FIXTURE-STATUS.md](test/FIXTURE-STATUS.md) for observed outcomes, and [docs/V1_RELEASE_BOUNDARY.md](docs/V1_RELEASE_BOUNDARY.md) for the frozen v1.0 scope.
 
 ---
 
@@ -415,7 +426,7 @@ postgres_audit:
 ## FAQ
 
 **Is this "CIS Certified"?**
-No. This is an independent implementation of CIS controls. For official CIS certification, use [CIS-CAT Pro](https://www.cisecurity.org/cybersecurity-tools/cis-cat-pro).
+No. This is an independent implementation of CIS controls. It is designed to support future certification-oriented review and built with certification-readiness in mind, but it is not certified or endorsed by CIS. For official CIS certification paths, use the applicable CIS programs and tooling.
 
 **Can I use this for compliance audits?**
 Yes, with caveats. This tool helps assess compliance posture, but official audits may require CIS-CAT Pro or manual validation. Always consult your auditor.
@@ -453,6 +464,4 @@ Built with reference to:
 - CIS PostgreSQL 16 Benchmark v1.1.0
 - DISA STIG PostgreSQL 12 V1R1
 - NIST SP 800-53 Revision 5
-- PostgreSQL Security Documentation
-T SP 800-53 Revision 5
 - PostgreSQL Security Documentation

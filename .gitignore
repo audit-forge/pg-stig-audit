@@ -21,6 +21,9 @@ env/
 # Audit output files
 results.json
 audit-results.json
+output/*.json
+output/*.sarif
+output/*.sarif.json
 *.sarif.json
 *.sarif
 wiz-findings.json

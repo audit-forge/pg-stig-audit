@@ -23,7 +23,7 @@ Run it from a host that can reach the target and, when applicable, can call `doc
 
 ## Requirements
 
-- Python 3.10+
+- Python 3.9+
 - PostgreSQL target reachable in one of these modes:
   - direct TCP (`--mode direct`)
   - Docker (`--mode docker`)

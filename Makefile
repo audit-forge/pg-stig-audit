@@ -15,7 +15,7 @@ help:
 	@echo "                        Run audit against an existing Docker Postgres container and push to Wiz"
 
 test-fixtures:
-	./test/run_tests.sh
+	bash ./test/run_tests.sh
 
 fixture-pack:
 	$(PYTHON) scripts/make_fixture_delta_pack.py --input-dir test/output --out-dir artifacts/fixture-pack

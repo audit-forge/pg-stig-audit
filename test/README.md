@@ -39,6 +39,13 @@ docker volume rm pg_hardened_data pg_baseline_data pg_vulnerable_data
 - `pg-vulnerable` should fail loudly and demonstrate that the tool is detecting real weaknesses
 - `pg-baseline` shows what a more ordinary/default PostgreSQL container looks like
 
+Current observed outcomes from live validation on 2026-03-26:
+- `pg-hardened` → `PASS 30 / FAIL 3 / WARN 2`
+- `pg-baseline` → `PASS 19 / FAIL 12 / WARN 4`
+- `pg-vulnerable` → `PASS 17 / FAIL 14 / WARN 4`
+
+See [FIXTURE-STATUS.md](FIXTURE-STATUS.md) for the written validation snapshot used for the v1.0 boundary freeze.
+
 ## Exit code behavior
 
 The audit tool can exit non-zero even when it is functioning correctly.

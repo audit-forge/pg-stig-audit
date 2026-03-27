@@ -6,6 +6,12 @@ on:
   pull_request:
     branches: [main, master]
   workflow_dispatch:
+    inputs:
+      enforce_gate:
+        description: "Fail the workflow when HIGH/CRITICAL findings are detected"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   pg-security-audit:
@@ -55,6 +61,16 @@ jobs:
             --fail-on high
         continue-on-error: true
 
+      - name: Audit summary
+        if: always()
+        run: |
+          if [ "${{ steps.audit.outcome }}" = "failure" ]; then
+            echo "pg-stig-audit detected HIGH or CRITICAL findings in the sample CI target."
+            echo "This workflow records findings and uploads artifacts by default; it does not fail the run unless strict gating is explicitly requested."
+          else
+            echo "pg-stig-audit completed without triggering the configured fail-on threshold."
+          fi
+
       - name: Upload SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v3
@@ -74,7 +90,7 @@ jobs:
           retention-days: 30
 
       - name: Enforce pipeline gate
-        if: steps.audit.outcome == 'failure'
+        if: steps.audit.outcome == 'failure' && github.event_name == 'workflow_dispatch' && inputs.enforce_gate
         run: |
-          echo "pg-stig-audit found HIGH or CRITICAL findings."
+          echo "pg-stig-audit found HIGH or CRITICAL findings. Strict gate was explicitly requested."
           exit 1

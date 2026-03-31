@@ -1,4 +1,4 @@
-.PHONY: help test-fixtures fixture-pack evidence-bundle compliance-pack wiz-report
+.PHONY: help test test-fixtures fixture-pack evidence-bundle compliance-pack wiz-report
 
 PYTHON ?= python3
 CONTAINER ?= my-postgres
@@ -7,12 +7,16 @@ WIZ_RESOURCE_ID ?= $(CONTAINER)
 help:
 	@echo "pg-stig-audit convenience targets"
 	@echo ""
+	@echo "  make test             Run unit tests (pytest)"
 	@echo "  make test-fixtures    Run hardened/baseline/vulnerable integration suite"
 	@echo "  make fixture-pack     Build deterministic fixture delta pack"
 	@echo "  make evidence-bundle  Build compliance evidence bundle from hardened fixture"
 	@echo "  make compliance-pack  Run test + fixture-pack + evidence-bundle"
 	@echo "  make wiz-report CONTAINER=<name> [WIZ_RESOURCE_ID=<id>]"
 	@echo "                        Run audit against an existing Docker Postgres container and push to Wiz"
+
+test:
+	$(PYTHON) -m pytest test/ -v
 
 test-fixtures:
 	bash ./test/run_tests.sh

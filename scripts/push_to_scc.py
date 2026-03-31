@@ -118,7 +118,7 @@ def build_finding(result: dict, source_name: str, resource_name: str) -> dict:
     if result.get("cis_id"):
         compliance.append({
             "standard": "CIS",
-            "version": "CIS PostgreSQL 16 Benchmark v1.0.0",
+            "version": "CIS PostgreSQL 16 Benchmark v1.1.0",
             "ids": [result["cis_id"]],
         })
     if result.get("stig_id"):

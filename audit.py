@@ -4,7 +4,7 @@ pg-stig-audit — PostgreSQL CIS Benchmark / DISA STIG Audit Tool
 for Containerized PostgreSQL Instances.
 
 Maps controls to:
-  - CIS PostgreSQL 16 Benchmark (v1.0.0)
+  - CIS PostgreSQL 16 Benchmark (v1.1.0)
   - DISA STIG PostgreSQL 12 (V1R1)
   - NIST SP 800-53 Rev 5 (FedRAMP High controls)
 
